@@ -1,0 +1,288 @@
+Scriptname Alk_Script_Invs_Activator extends ObjectReference
+{This Script controls the required input for the desired out put of the activator. This input could be a actor value, or item in the players inventory. Once the player succesfully activates the activator the code then disables the activator.}
+
+;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////;
+;//											Properties												//;
+;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////;
+
+;Actor property references
+Actor Property PlayerRef Auto
+{This is the actor reference to the player character}
+ActorValue Property Alk_ValueToTest Auto
+{Set this to the value from the player you'd like to test}
+
+;Object property references
+ObjectReference Property Alk_ObjectToControl Auto
+{Set this to the Object reference to the object that the activator is going to control. Usually this will be a door.}
+ObjectReference Property Alk_ObjectRequired Auto
+{Set this to the object reference of the item the player must find to succesfully activate the activator.}
+ObjectReference Property Alk_ObjectToSpawn Auto
+{If you'd like a new object to spawn after player passes check set this variable to it. \nMake sure the object has the initially disabled box checked in its cell reference}
+
+;Int Properties 
+Int Property Alk_ValueToPass Auto
+{Set this to the value the player must meet or exceed to pass the check}
+Int Property Alk_ExpToReward Auto
+{Seth this value to the amount of exp you would like to reward the player for succeeding}
+
+;Bool Properties
+Bool Property bCheckValue Auto
+{If true script will check actor for the designated value - and retrun true or false.} 
+Bool Property bCheckItem Auto
+{If True script will check player inventory for item - and return true or false}
+Bool Property bSpawnItem Auto
+{If true script will know to spawn an Item after a successful item or value check}
+Bool Property bRemoveRequiredItem Auto
+{Set this to true to remove the required item on success}
+Bool Property bOpenObject Auto
+{Set to true if you want the successful check to open and false if you want it to close the controlled object.}
+Bool Property bLocked Auto
+{Set to true to lock controlled object and false to unlock controlled object after successful check}
+Bool Property bBlockActivate Auto
+{Set to true if you want the controlled object to no longer activate after successful check}
+Bool Property bHideActivate Auto
+{Set to true if you want to hide activate HUD text of controlled object after successful check. \nNOTE: If bBlockActivate is false this must also be false!}
+Bool Property bBlockSpawnItemAct Auto
+{If True player will not be able to activate the spawned object}
+Bool Property bHideSpawnItemAct Auto
+{If true Script will hide activate HUD text for player}
+Bool Property bAlk_ExpDirect Auto
+{Set to true if you don't want exp modifiers to apply to the XP that is rewarded at success.}
+Bool Property bAlk_Debug Auto
+{Set True to activate debug message boxes}
+
+;String Properties
+String Property sIntroText Auto
+{Write what the player see's when they interact with object and give them a hint as to how to pass the check. IE you need and item or your skill must be... so on}
+String Property sSuccessText Auto
+{Write the text to display to player if they pass the check.}
+String Property sFailText Auto
+{Write the text to display to player if they fail the check.}
+
+;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////;
+;//										Local Variables												//;
+;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////;
+
+;local Bools to store Item and value check restults
+Bool bItemCheckSuccess 
+Bool bValueCheckSuccess
+Bool bActivateSuccess
+
+;Local Int
+Int PlayerValue
+
+;Local Strings
+String LockState
+
+;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////;
+;//										Intitalization													//;
+;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////;
+
+Event OnInit()
+	
+	If bLocked
+		LockState = "LockObject"
+	Else
+		LockState = "UnlockObject"
+	EndIf
+;DEBUG MESSAGE BOX
+	If bAlk_Debug
+		Debug.MessageBox(	"Intizalization of Activator succesful and LockState is set to " + LockState)	
+	EndIf
+
+	gotoState("Alk_WaitingForPlayer")
+	
+EndEvent
+
+;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////;
+;//									Main Driver Event State											//;
+;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////;
+
+auto State Alk_WaitingForPlayer
+	;Main Chain of sequence for state control
+	Event OnActivate(ObjectReference akActivator)
+		;Only let player activate this event
+		If akActivator.Activate(PlayerRef)
+
+		Debug.MessageBox(sIntroText)
+			
+			If bCheckItem && bCheckValue
+				gotoState("ItemAndValueControlsObject")
+
+			ElseIf bCheckItem && !bCheckValue
+				gotoState("ItemControlsObject")
+		
+			ElseIf !bCheckItem && bCheckValue
+				gotoState("ValueControlsObject")
+		
+			ElseIf !bCheckItem && !bCheckValue
+				gotoState("Alk_WaitingForPlayer")
+			EndIf
+		EndIf
+
+
+	;DEBUG MESSAGE BOX
+		If bAlk_Debug
+			Debug.MessageBox(	"MainDriving Event Successfuly completed!")	
+		EndIf
+
+	EndEvent
+EndState
+
+;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////;
+;//								Object Control States												//;
+;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////;
+
+State ItemControlsObject
+	Event OnActivate(ObjectReference akActivator)
+		;Check player inventory for required item set ItemCheckSuccess if item found
+		If Alk_ObjectRequired.GetActorOwner() == PlayerRef.GetActorBase()
+			bItemCheckSuccess = True
+		Else
+			bItemCheckSuccess = False
+		EndIf
+		
+		;If check succeeded interacted with controlled object
+		If bItemCheckSuccess
+			If bLocked
+				Alk_ObjectToControl.Lock()
+			Else
+				Alk_ObjectToControl.Unlock()
+			EndIf
+			If bSpawnItem
+				Alk_ObjectToSpawn.Enable()
+				Alk_ObjectToSpawn.BlockActivation(bBlockSpawnItemAct, bHideSpawnItemAct)
+			EndIf
+			If bRemoveRequiredItem
+				PlayerRef.RemoveItem(Alk_ObjectRequired)
+			EndIf
+			Alk_ObjectToControl.SetOpen(bOpenObject)
+			Alk_ObjectToControl.BlockActivation(bBlockActivate, bHideActivate)
+			Debug.MessageBox(sSuccessText)									;This Text can Double as debug text while testing
+			bActivateSuccess = True
+			Game.RewardPlayerXP(Alk_ExpToReward, bAlk_ExpDirect)
+
+			If bAlk_Debug
+				Debug.MessageBox("All Operations successful player has activated and met all requirments. " + Alk_ExpToReward + "XP Has been rewarded (Directly?: " + bAlk_ExpDirect + "). \nScript will now clean up and disable activator")
+			EndIf
+		
+			;Disables activator when done
+			Self.Disable()
+		Else
+			Debug.MessageBox(sFailText)										;This Text can Double as debug text while testing
+			bActivateSuccess = False											
+			gotoState("Alk_WaitingForPlayer")
+		EndIf	
+
+		If bAlk_Debug
+			Debug.MessageBox("We are in the Item control State")
+		EndIf	
+
+	EndEvent
+EndState
+
+
+State ValueControlsObject
+	Event OnActivate(ObjectReference akActivator)
+
+		;Check if player's value pass the required amount - these variables are evaluated as Int Data
+		PlayerValue  = Game.GetPlayer().GetValue(Alk_ValueToTest) as Int
+		If PlayerValue >= Alk_ValueToPass
+			bValueCheckSuccess = True
+		Else
+			bValueCheckSuccess = False
+		EndIf
+
+		If bValueCheckSuccess
+			If bLocked
+				Alk_ObjectToControl.Lock()
+			Else
+				Alk_ObjectToControl.Unlock()
+			EndIf
+			If bSpawnItem
+				Alk_ObjectToSpawn.Enable()
+				Alk_ObjectToSpawn.BlockActivation(bBlockSpawnItemAct, bHideSpawnItemAct)
+			EndIf
+			If bRemoveRequiredItem
+				PlayerRef.RemoveItem(Alk_ObjectRequired)
+			EndIf
+			Alk_ObjectToControl.SetOpen(bOpenObject)
+			Alk_ObjectToControl.BlockActivation(bBlockActivate, bHideActivate)
+			Debug.MessageBox(sSuccessText)
+			bActivateSuccess = True
+			Game.RewardPlayerXP(Alk_ExpToReward, bAlk_ExpDirect)
+
+			If bAlk_Debug
+				Debug.MessageBox("All Operations successful player has activated and met all requirments. " + Alk_ExpToReward + "XP Has been rewarded (Directly?: " + bAlk_ExpDirect + "). \nScript will now clean up and disable activator")
+			EndIf
+		
+			;Disables activator when done
+			Self.Disable()
+		Else
+			Debug.MessageBox(sFailText)
+			bActivateSuccess = False
+			gotoState("Alk_WaitingForPlayer")
+		EndIf
+
+		If bAlk_Debug
+			Debug.MessageBox("We are in the Value control State")
+		EndIf
+
+	EndEvent
+EndState
+
+
+State ItemAndValueControlsObject
+	Event OnActivate(ObjectReference akActivator)
+
+		;Check player inventory for required item set ItemCheckSuccess if item found
+		If Alk_ObjectRequired.GetActorOwner() == PlayerRef.GetActorBase()
+			bItemCheckSuccess = True
+		Else
+			bItemCheckSuccess = False
+		EndIf
+		;Check if player's value pass the required amount - these variables are evaluated as Int Data
+		PlayerValue  = Game.GetPlayer().GetValue(Alk_ValueToTest) as Int
+		If PlayerValue >= Alk_ValueToPass
+			bValueCheckSuccess = True
+		Else
+			bValueCheckSuccess = False
+		EndIf
+		
+		If bItemCheckSuccess && bValueCheckSuccess
+			If bLocked
+				Alk_ObjectToControl.Lock()
+			Else
+				Alk_ObjectToControl.Unlock()
+			EndIf
+			If bSpawnItem
+				Alk_ObjectToSpawn.Enable()
+				Alk_ObjectToSpawn.BlockActivation(bBlockSpawnItemAct, bHideSpawnItemAct)
+			EndIf
+			If bRemoveRequiredItem
+				PlayerRef.RemoveItem(Alk_ObjectRequired)
+			EndIf
+			Alk_ObjectToControl.SetOpen(bOpenObject)
+			Alk_ObjectToControl.BlockActivation(bBlockActivate, bHideActivate)
+			Debug.MessageBox(sSuccessText)
+			bActivateSuccess = True
+			Game.RewardPlayerXP(Alk_ExpToReward, bAlk_ExpDirect)
+
+			If bAlk_Debug
+				Debug.MessageBox("All Operations successful player has activated and met all requirments. " + Alk_ExpToReward + "XP Has been rewarded (Directly?: " + bAlk_ExpDirect + "). \nScript will now clean up and disable activator")
+			EndIf
+		
+			;Disables activator when done
+			Self.Disable()
+		Else
+			Debug.MessageBox(sFailText)
+			bActivateSuccess = False
+			gotoState("Alk_WaitingForPlayer")
+		EndIf
+
+		If bAlk_Debug
+			Debug.MessageBox("We are in the Item + Value control State")
+		EndIf
+
+	EndEvent
+EndState
